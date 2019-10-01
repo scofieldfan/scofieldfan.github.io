@@ -1,0 +1,479 @@
+### 前言
+今年和以往一个区别就是有一些大厂增加了手写前端逻辑 或者 收集算法这个环节。前端的一些语言特性，异步控制相对好准备，大多都是Promise的使用外加递归。算法就相对来说难准备一些。需要一个长时间的积累。本文分几类来举例。抛转引玉。
+
+### 前端语言特性
+这部分主要考察对于js语言本身的理解，如this,原型链的理解，instanceOf，new关键字等。
+
+- 实现function的bind 函数
+```javascript
+Function.prototype.mybind = function(context, ...args) {
+    let fun = this;
+    function bound(...args2) {
+        let self = this instanceof bound ? this : context;
+
+        return fun.apply(self, args.concat(args2));
+    }
+    bound.prototype = Object.create(fun.prototype);
+    return bound;
+};
+```
+
+- 实现InstanceOf(考察原型链的理解)
+```javascript
+function isInstanceOf(child, fun) {
+    if (typeof fun !== "function") {
+        throw new TypeError("arg2 fun is not a function");
+    }
+    if (child === null) {
+        return false;
+    }
+    if (child.__proto__ !== fun.prototype) {
+        return isInstanceOf(child.__proto__, fun);
+    }
+    return true;
+}
+```
+
+- 实现new 这个关键字函数（考察new的过程）
+```
+function myNew(fun, ...arg) {
+    if (typeof fun !== "function") {
+        throw new TypeError(" fun is not a function");
+    }
+    let obj = {};
+    Object.setPrototypeOf(obj, fun.prototype);
+    fun.apply(obj, arg);
+    return obj;
+}
+```
+- 实现JSON.parse函数 
+```javascript
+function JSONParse(strs) {
+    if (strs === "" || typeof strs !== "string") {
+        throw new SyntaxError("JSONParse error");
+    }
+    if (strs[0] === "{") {
+        let obj = {};
+        if (strs[strs.length - 1] == "}") {
+            let fields = strs.substring(1, strs.length - 1).split(",");
+            for (let field of fields) {
+                let index = field.indexOf(":");
+                let temp = [];
+                if (index !== -1) {
+                    temp[0] = field.substring(0, index);
+                    temp[1] = field.substring(index + 1, field.length);
+                }
+                let key = temp[0].substring(1, temp[0].length - 1);
+                let value = parseValue(temp[1]);
+                //if (value !== undefined) {
+                obj[key] = value;
+                //}
+            }
+        }
+        console.log("prase:", obj);
+        return obj;
+    }
+    if (strs[0] === "[") {
+        if (strs[strs.length - 1] == "]") {
+            let result = [];
+            let fields = strs.substring(1, strs.length - 1).split(",");
+            for (let field of fields) {
+                result.push(parseValue(field));
+            }
+            return result;
+        }
+    }
+}
+```
+- 实现JSON.stringify函数 
+```javascript
+function JSONStringify(obj) {
+    if (
+        obj === undefined ||
+        obj === null ||
+        typeof obj === "string" ||
+        typeof obj === "boolean" ||
+        typeof obj === "number"
+    ) {
+        return obj;
+    }
+    if (typeof obj === "function") {
+        return "";
+    }
+    if (Array.isArray(obj)) {
+        let result = [];
+        for (let i = 0; i < obj.length; i++) {
+            result.push(JSONStringify(obj[i]));
+        }
+        return "[" + result.join(",") + "]";
+    } else {
+        let result = [];
+        for (let key in obj) {
+            result.push(`"${key}":${JSONStringify(obj[key])}`);
+        }
+        return "{" + result.join(",") + "}";
+    }
+}
+```
+- 实现一个继承（原型链）
+```
+function myExtends(parent, child) {
+    function nop() {}
+    nop.prototype = parent.prototype;
+    child.prototype = new nop();
+}
+```
+### 前端工具类
+这部分都是前端的一些高阶函数（闭包）。通常用来解决一些通用的问题。这个思想和J2EE中的（面向切面编程）AOP非常相似。例如debounce,memorize
+- 实现debounce函数
+ ```javascript
+    debounce(fun, delay, immediate) {
+        let timer = null;
+        return (...args) => {
+            if (timer) {
+                clearTimeout(timer);
+            } else {
+                timer = setTimeout(() => {
+                    fun.apply(this, args);
+                }, delay);
+            }
+        };
+    }
+ ```
+ - 实现throttle函数
+ ```javascript
+ throttle(fun, delay, immediate) {
+        let flag = false;
+        return (...args) => {
+            if (!flag) {
+                flag = true;
+                setTimeout(() => {
+                    fun.apply(this, args);
+                    flag = false;
+                }, delay);
+            }
+        };
+    },
+ ```
+ 
+  - 实现memeorize函数，可以缓存函数的执行结果。在第二次调用之后会加速。
+  ```javascript
+  memeorize(fun) {
+        let cache = {};
+        return (...args) => {
+            const key = args.toString();
+            if (cache[key]) {
+                return cache[key];
+            }
+            let value = fun.apply(this, args);
+            cache[key] = value;
+            return value;
+        };
+    }
+  ```
+  
+  - 实现 promisy 函数。将一个callback的函数转化为promise 链式调用。
+  ```javascript
+  promisy(fun) {
+        return (...args) => {
+            return new Promise((resolve, reject) => {
+                try {
+                    fun(...args, resolve);
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        };
+    }
+    //使用方法
+    fun(arg1,callback);
+    let promisey = promisy(fun);
+    promisey().then((res)=>());
+  ```
+  
+  - 实现curry化。这是函数式编程的概念。柯里化。将多个参数的函数调用分布来调用。
+  ```javascript
+  currying(fun) {
+        function helper(fn, ...arg1) {
+            let length = fn.length;
+            let self = this;
+            return function(...arg2) {
+                let arg = arg1.concat(arg2);
+                if (arg.length < length) {
+                    return helper.call(self, fn, ...arg);
+                }
+                return fn.apply(this, arg);
+            };
+        }
+        return helper(fun);
+    }
+    //例子
+    function add(a, b) {
+        return a + b;
+    }
+    let curryadd = util.currying(add);
+    let add1 = curryadd(1);
+    t.is(add1(2), 3);
+  ```
+  
+  - 以千分位格式化数字。输入123456，输出123,456
+  ```javascript
+  formatNumber(number) {
+        if (typeof number !== "number") {
+            return null;
+        }
+        if (isNaN(number)) {
+            return null;
+        }
+
+        let result = [];
+        let tmp = number + "";
+        let num = number;
+        let suffix = "";
+        if (tmp.indexOf(".") !== -1) {
+            suffix = tmp.substring(tmp.indexOf(".") + 1);
+            num = parseInt(tmp.substring(0, tmp.indexOf(".")));
+        }
+        while (num > 0) {
+            result.unshift(num % 1000);
+            num = Math.floor(num / 1000);
+        }
+        let ret = result.join(",");
+        if (suffix !== "") {
+            ret += "." + suffix;
+        }
+        return ret;
+    }
+  ```
+  
+  ### 前端逻辑控制类
+  这类问题大多是递归外加promise的理解。大家可以着重看看promise的使用。掌握了promise还是很好解决这些问题的。
+  -实现一个sleep的函数。sleep(3000).then(()=>{})
+  ```javascript
+  function sleep(delay){
+      return new Promise((resolve,reject)=>{
+        setTimeout(()=>{
+            resolve()
+        },delay);
+      })
+  }
+  ```
+  
+  -使用XMLHttpRequest 实现一个Promise的ajax
+  ```javascript
+  function myRequest(url, method, params) {
+    return new Promise((resolve, reject) => {
+        let xhr = new XMLHttpRequest();
+        xhr.open(method, url);
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState != 4) {
+                return;
+            }
+            if (xhr.state === 200) {
+                resolve(xhr.response);
+            }
+        };
+        xhr.addEventListener("error", e => {
+            reject(error);
+        });
+        xhr.send(params);
+    });
+}
+  ```
+  
+  -用promise 实现一个lazyman.  LazyManAsync("Hank").sleepFirst(5).eat("supper");
+  LazyManAsync("Hank").sleep(10).eat("dinner")
+  ```javascript
+  export function LazyManAsync(name) {
+    return new LazyManFactory(name);
+}
+
+function LazyManFactory(name) {
+
+    this.tasks = [];
+    this.tasks.push(() => {
+        return new Promise((resolve, reject) => {
+            console.log("hi", name);
+            resolve();
+        })
+    });
+    setTimeout(() => {
+        this.run();
+    }, 0);
+
+}
+
+LazyManFactory.prototype.run = function () {
+
+    if (this.tasks.length === 0) {
+        return;
+    }
+    let task = this.tasks.shift();
+
+    task().then(() => {
+        this.run();
+    }).catch(() => {
+        this.run();
+    })
+}
+
+LazyManFactory.prototype.sleep = function (time) {
+    this.tasks.push(() => {
+        return new Promise((resolve, reject) => {
+            setTimeout(() => {
+                resolve();
+            }, time * 1000)
+        })
+    })
+    return this;
+}
+
+
+LazyManFactory.prototype.eat = function (name) {
+    this.tasks.push(() => {
+        return new Promise((resolve, reject) => {
+            console.log("eat:", name);
+            resolve();
+        })
+    })
+    return this;
+}
+
+
+LazyManFactory.prototype.sleepFirst = function (time) {
+    this.tasks.unshift(() => {
+        return new Promise((resolve, reject) => {
+            setTimeout(() => {
+                resolve();
+            }, time * 1000)
+        })
+    })
+    return this;
+}
+  ```
+  
+  ### 算法类
+  这类一般涉及到算法。这部分短时间不好准备，建议可以作为长期战略来复习。这里暂时只列出非常高频的简单题。实际面试中有可能难度大大超过下面。
+  - 两数之和
+  ```javascript
+  const twoSum = function(arys, target) {
+    if (!Array.isArray(arys)) {
+        throw new TypeError("arg1 is not a array");
+    }
+    const map = new Map();
+    for (let i = 0; i < arys.length; i++) {
+        let num = target - arys[i];
+        if (map.get(num) !== undefined) {
+            return [map.get(num), i];
+        }
+        map.set(arys[i], i);
+    }
+    return [];
+};
+  ```
+  - 快速排序
+  ```javascript
+  const quickSort = function(ary = [], start = 0, end = ary.length - 1) {
+    if (!Array.isArray(ary)) {
+        throw new TypeError("arg1 is not a array");
+    }
+    if (start >= end || isNaN(start) || isNaN(end)) {
+        return;
+    }
+    let index = partition(start, end);
+    quickSort(ary, start, index - 1);
+    quickSort(ary, index + 1, end);
+    function partition(left, right) {
+        let priviot = ary[right];
+        let k = left - 1;
+        for (let i = left; i <= right - 1; i++) {
+            if (ary[i] <= priviot) {
+                swap(++k, i);
+            }
+        }
+        swap(++k, right);
+        return k;
+    }
+    function swap(i, j) {
+        let temp = ary[i];
+        ary[i] = ary[j];
+        ary[j] = temp;
+    }
+};
+  ```
+  - 二分查找.给定一个排序好的数组，用二分查找的办法找出目标元素。
+  ```javascript
+  const binarySearch = function(ary, target) {
+    if (!Array.isArray(ary)) {
+        throw new TypeError("arg1 is not a array");
+    }
+    let start = 0,
+        end = ary.length - 1;
+    while (start <= end) {
+        let mid = Math.floor(start + (end - start) / 2);
+        if (ary[mid] === target) {
+            return mid;
+        } else if (ary[mid] < target) {
+            start = mid + 1;
+        } else {
+            end = mid - 1;
+        }
+    }
+    return -1;
+};
+  ```
+  - 数组洗牌。将数组中的数字，打乱顺序，保证每个位置的概率相等。
+  ```javascript
+  const flush = function(num = []) {
+    for (let i = 0; i < num.length; i++) {
+        let index = Math.floor(Math.random() * (num.length - 1));
+        let temp = num[i];
+        num[i] = num[index];
+        num[index] = temp;
+    }
+};
+  ```
+  - 斐波那契数列 实现函数 f(n) = f(n-1)+f(n-2)
+   
+  ```javascript
+  const f = (n)=>{
+      if(n<0){
+        return 0;
+      }
+      if(n === 0 ){
+          return 1;
+      }
+      return f(n-1)+f(n-2);
+      
+  }
+  ```
+  - 集合的子集.求一个函数所有的子集。比如集合[A,B]。输出[],[A],[B],[A,B]
+  
+  ```javascript
+  var subsets = function(nums) {
+    
+    let result = [];
+    function dfs(index,ans){
+        let ans2 = ans.concat();
+        ans2.push(nums[index]);
+        if(index === 0){
+            result.push(ans);
+            result.push(ans2);
+            return;
+        }else{
+            dfs(index-1,ans);
+            dfs(index-1,ans2);
+        }
+    }
+    dfs(nums.length-1,[]);
+    return result;
+};
+  ```
+  
+ ### 总结
+ 文中出现的题目，本人在github上总结了一个项目[turtle-rock](https://github.com/scofieldfan/turtle-rock).如果您觉得帮助了到你，请帮忙给个star。你的star，是我写作的动力。
+  
+ ### 说明
+由于本人水平所限，难免有所疏漏。如果有错误之处，请评论，我会及时回复并修改。本文是大龄前端系列之手写题。
+
+[2019大龄前端如何准备面试?](https://juejin.im/post/5d834e62e51d453b8b5fa69e)

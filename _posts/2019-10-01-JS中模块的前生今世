@@ -1,0 +1,205 @@
+## 前言
+什么是一个模块，js中的模块又是什么？为什么有AMD，CMD，UMD以及现在的CommonJS和ES6 他们有啥区别呢？究竟都是要解决什么问题？
+
+### 远古时代
+在ES6出来之前，JS中是没有严格意义的模块的。在ES6之前代码作用域只有全局作用域 和函数作用域。所有代码最终是在一个上下文，共享整个全局变量。JS的引用通常是使用script标签，然后共享全局变量。这就会产生非常多共享全局变量的问题。由于JS的函数有函数作用域，所以就有了这个IIFE设计模式。
+```
+   let people =  (function(){
+        
+        var  name = 'ada';
+        
+        var getName = function (){
+            return name
+        }
+        var setName = function(n){
+            name = name;
+        }
+        return {
+            getName:getName,
+            setName:setName
+        }
+    })()
+```
+
+这就是最一个典型的模块。这个模块返回一个对象，这个对象里有一些函数或者变量。可以提供外界调用。内部通过闭包封装了一些私有变量，如图所示name 就无法被外界访问。这就是最初级的一个模块的实现。
+
+### AMD,CMD时代
+上面这个模式解决了模块设计的基本问题，就是封装性。但是还欠缺一些通用的对模块的管理。怎么引用一个模块？怎么管理全局的某块。于是业界就进化出了AMD和CMD。他们实质上都是通过一个配置为每个模块分配了一个名字，对应到这个模块的导出对象。
+
+比如我们看一下 CMD的seajs
+```
+seajs.config({
+  base: "../sea-modules/",
+  alias: {
+    "jquery": "jquery/jquery/1.10.1/jquery.js"
+  }
+})
+//使用一个模块
+seajs.use(['jquery'],function($,hm){  
+   //引用一个库
+});  
+
+//定义一个模块
+define(function(require, exports, module) {
+  // 通过 require 引入依赖
+  var $ = require('jquery');
+
+  // 或者通过 module.exports 提供整个接口
+  module.exports = ...
+
+});
+```
+如代码所示首先通过config方法为每个模块定义一个名字和文件的映射。然后在使用中就可以用名字来获取代码的导出对象。定义模块时候实际上就是封装了一个函数，然后内部有一个导出对象。
+requireJs中的也类似。
+
+### CommonJS 
+
+CommonJS是在Nodejs中使用的，但是他也不是JS原生的模块。commonjs里每一个文件都是一个模块。因为在服务端我们有一个文件路径作为文件的名字。于是commonjs中变成了这样。
+定义一个模块 a.js
+```
+var x = 5;
+let setX = (a){
+    x = a;
+}
+
+module.exports={
+    x,
+    setX
+};
+```
+
+ b.js中引用a.js
+```
+let b = require("a.js")
+b.setX(100);
+console.log(b.x);
+```
+
+commonjs 里有两个问题。1个就是浏览器无法理解。2 是因为他是同步加载代码的，不太适合浏览器（此处有疑问，为何浏览器不支持同步，如果每次require就添加一个script标签来执行，这是一个异步的过程）。
+
+于是webpack 就有了一个解决方案叫做bundle.js
+
+### webpack
+bundle.js就是webpack将所有js文件打包到一个文件里。webpack同时实现了require。和模块。究竟是什么让我们看下代码。原始的代码就是entry.js.只有一句话，然后我们看看webpack打包之后是什么样的代码。
+
+entry.js
+```
+console.log("a");
+```
+下面看看打包之后的代码
+
+```javascript
+/******/ 	function __webpack_require__(moduleId) {
+/******/
+/******/ 		// Check if module is in cache
+/******/ 		if(installedModules[moduleId]) {
+/******/ 			return installedModules[moduleId].exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = installedModules[moduleId] = {
+/******/ 			i: moduleId,
+/******/ 			l: false,
+/******/ 			exports: {},
+/******/ 			hot: hotCreateModule(moduleId),
+/******/ 			parents: (hotCurrentParentsTemp = hotCurrentParents, hotCurrentParents = [], hotCurrentParentsTemp),
+/******/ 			children: []
+/******/ 		};
+/******/
+/******/ 		// Execute the module function
+/******/ 		modules[moduleId].call(module.exports, module, module.exports, hotCreateRequire(moduleId));
+/******/
+/******/ 		// Flag the module as loaded
+/******/ 		module.l = true;
+/******/
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+...
+...//这里是模块的代码，被一个函数包装起来。
+                    /***/ (function(module, exports) {
+                    
+                    console.log("a");
+                    
+                    /***/ })
+```
+可以看到webpack 的实现也是将模块的代码用IIFE来封装，require的实现其实 也就是根据moduleId来找到对应函数，执行并返回模块的导出对象。这也没有什么稀奇本质上和我们最开始的IIFE没有区别。
+
+### ES6 Module
+从ES6 开始 ES真正有了Module，他和以往标准的有本质不同，他才是真正的模块。在浏览器中我们可以通过添加属性type='module'引用一个模块。
+```javascript
+<html>
+    <body>
+     <script type=module src='dom.js'></script>
+    </body>
+</html>
+```
+dom.js
+```javascript
+import getUsers from "./users.js"
+console.log(getUsers());
+```
+users.js
+```javascript
+// users.js
+
+var users = ["Tyler", "Sarah", "Dan"];
+export default function getUsers() {
+  return users;
+}
+```
+
+我们页面中引入dom.js，dom.js中import user.js。如果我们用浏览器打开最初的html，随着浏览器执行代码，会自动请求users.js。并且每个模块是独立隔离的，并不需要IIFE模式。
+
+#### 介绍一个优化办法
+对于现代的浏览器很多已经支持了ES6了，如果你还用babel转化为es5代码，那么会添加很多webpack相关的代码，而且执行效率相对较低。可以通过type='module'来直接执行代码。这就需要你在webpack的时候打两份代码。一份没有转化，一份转化了。对于非现代浏览器则继续用老的降级方案。新浏览器直接执行es6。
+```
+<script type="module" src="runs-if-module-supported.js"></script>
+<script nomodule src="runs-if-module-not-supported.js"></script>
+```
+
+#### TreeShaking
+commonjs的 require 和 import 另外一个区别就是import只能在模块头部引用，不能在条件分支中引用。而require中并没有这个限制。所以要求我们在配置webpack的treeshaking的时候，需要使用es6的模块，不能使用commonjs。
+.babelrc文件
+```javascript
+{
+    "presets": [
+        [
+            "env",
+            {
+                "modules": false,//特别注意只有这个为false ，webpack才能treeshaking
+                "targets": {
+                    "browsers": ["> 1%", "last 2 versions", "not ie <= 8"]
+                }
+            }
+        ],
+        "stage-1"
+    ],
+    "plugins": ["transform-runtime"
+```
+错误示例，条件语句中不能使用import
+```javascript
+if (!user) {
+  import * as api from './api' // 只能在页面头部使用
+}
+```
+require中可以使用变量，而import 中就不行
+```javascript
+let b = "er";
+let fileName = "./us" + b + ".js";
+let user = require(fileName)
+```
+这个例子在require中正确。而在import中就错误
+```javascript
+    let b = "er";
+    let fileName = "./us" + b + ".js";
+    import a from fileName;//报错!error!
+```
+#### import()
+动态和异步对于动态引入只能用import().import()可以使用变量 也可以在分支中使用。import()返回的事一个promise，所以可以使用await来等待。
+```JavaScript
+ const name = await import(`./util/${name}`);
+```
+
+### 说明
+由于本人水平所限，难免有所疏漏。如果有错误之处，请评论，我会及时回复并修改。
+
